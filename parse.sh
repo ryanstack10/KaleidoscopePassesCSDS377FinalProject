@@ -9,7 +9,7 @@ do
 	echo "\$cat $ARG | ./toy"
 	cat $ARG | ./toy
 
-	OUTPUT=${ARG%.*}_output.o
+	OUTPUT=${ARG%.*}.o
 	echo "\n\$mv output.o $OUTPUT"
 	mv output.o $OUTPUT
 	echo "Moved output to $OUTPUT"
