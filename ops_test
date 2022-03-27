@@ -10,3 +10,7 @@ def le (x y)
 	x <= y;
 def ge (x y)
 	x >= y;
+def inv (x)
+    !x;
+def neg (x)
+    -x;

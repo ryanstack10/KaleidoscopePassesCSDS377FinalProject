@@ -584,11 +584,8 @@ static std::unique_ptr<ExprAST> ParsePrimary() {
 ///   ::= '!' unary
 static std::unique_ptr<ExprAST> ParseUnary() {
   // If the current token is not an operator, it must be a primary expr.
-  if (!IsOperator()) {
-    printf("ParseUnary -> ParsePrimary\n");
+  if (!IsOperator())
     return ParsePrimary();
-  }
-  printf("Genuine Primary: %d", CurTok);
 
   // If this is a unary operator, read it.
   int Opc = CurTok;
@@ -614,7 +611,6 @@ static std::unique_ptr<ExprAST> ParseBinOpRHS(int ExprPrec,
     // Okay, we know this is a binop.
     int BinOp = CurTok;
     getNextToken(); // eat binop
-    printf("Next: %d\n", CurTok);
 
     // Parse the unary expression after the binary operator.
     auto RHS = ParseUnary();
@@ -644,7 +640,6 @@ static std::unique_ptr<ExprAST> ParseExpression() {
   if (!LHS)
     return nullptr;
 
-  printf("Made it %d\n", CurTok);
   return ParseBinOpRHS(0, std::move(LHS));
 }
 
@@ -668,20 +663,22 @@ static std::unique_ptr<PrototypeAST> ParsePrototype() {
     break;
   case tok_unary:
     getNextToken();
-    if (!IsUnaryOp())
+    if (!isascii(CurTok))
       return LogErrorP("Expected unary operator");
     FnName = "unary";
     FnName += (char)CurTok;
     Kind = 1;
+    UnaryOperators.insert((char)CurTok);
     getNextToken();
     break;
   case tok_binary:
     getNextToken();
-    if (!IsBinaryOp())
+    if (!isascii(CurTok))
       return LogErrorP("Expected binary operator");
     FnName = "binary";
     FnName += (char)CurTok;
     Kind = 2;
+    int& precedence = BinopPrecedence[(char)CurTok];
     getNextToken();
 
     // Read the precedence if present.
@@ -691,6 +688,8 @@ static std::unique_ptr<PrototypeAST> ParsePrototype() {
       BinaryPrecedence = (unsigned)NumVal;
       getNextToken();
     }
+    precedence = BinaryPrecedence;
+
     break;
   }
 
@@ -801,6 +800,19 @@ Value *UnaryExprAST::codegen() {
   Value *OperandV = Operand->codegen();
   if (!OperandV)
     return nullptr;
+
+  switch (Opcode) {
+    case '!':
+      // Compare argument with 0.0, return true iff argument equals 0.0
+      OperandV = Builder->CreateFCmpOEQ(
+        OperandV, ConstantFP::get(*TheContext, APFloat(0.0)), "nottmp");
+      // Convert bool 0/1 to double 0.0 or 1.0
+      return Builder->CreateUIToFP(OperandV, Type::getDoubleTy(*TheContext), "booltmp");
+    case '-':
+      return Builder->CreateFNeg(OperandV, "negtmp");
+    default:
+      break;
+  }
 
   Function *F = getFunction(std::string("unary") + Opcode);
   if (!F)
@@ -1259,7 +1271,8 @@ extern "C" DLLEXPORT double printd(double X) {
 
 int main() {
   // Install standard unary operators.
-  //UnaryOperators.insert('!');
+  UnaryOperators.insert('!');
+  UnaryOperators.insert('-');
 
   // Install standard binary operators.
   // 1 is lowest precedence.

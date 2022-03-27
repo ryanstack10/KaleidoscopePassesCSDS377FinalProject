@@ -40,13 +40,13 @@ where `double` is repeated n times.
 Now we can call `foo(-1, 3, ..., 93)`, for example.
 
 ## Example
-`bool_ops` contains Kaleidoscope functions that test the `==, !=, <, >, <=,` and `>=` operators.  
-`bool_ops_test.cpp` contains C++ code to run the functions on `bool_ops`.  
+`ops_test` contains Kaleidoscope functions that test the `==, !=, <, >, <=,` and `>=` operators.  
+`ops_test.cpp` contains C++ code to run the functions on `ops_test`.  
 1 ``$ clang++-13 -g -O3 toy.cpp `llvm-config-13 --cxxflags --ldflags --system-libs --libs all` -o toy``  
-2 `$ cat bool_ops | ./toy`  
-3 `$ clang++-13 bool_ops_test.cpp output.o -o bool_ops_test`  
+2 `$ cat ops_test | ./toy`  
+3 `$ clang++-13 ops_test.cpp output.o -o ops_test`  
 OR  
-2 `$ sh parse.sh bool_ops`  
-3 `$ clang++-13 bool_ops_test.cpp bool_ops.o -o bool_ops_test`  
-4 `$ ./bool_ops_test`  
+2 `$ sh parse.sh ops_test`  
+3 `$ clang++-13 ops_test.cpp ops_test.o -o ops_test`  
+4 `$ ./ops_test`  
 Manually verify that the operation results are correct.
