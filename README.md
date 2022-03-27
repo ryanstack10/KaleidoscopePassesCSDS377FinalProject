@@ -6,8 +6,8 @@
 `main.cpp` refers to code written by the user that uses functions defined in `file`
 
 ## Compile toy.cpp
-`$ clang++-10 -g -O3 toy.cpp \`llvm-config-10 --cxxflags --ldflags --system-libs --libs all\` -o toy`  
-Note: clang++/llvm-config executable names may or may not include the "-10".
+``$ clang++-13 -g -O3 toy.cpp `llvm-config-13 --cxxflags --ldflags --system-libs --libs all` -o toy``  
+Note: clang++/llvm-config executable names may or may not include the "-13".
 
 ## Parse with toy
 `$ cat file | ./toy`  
@@ -21,7 +21,7 @@ The script will automatically rename the output .o files to `file1.o file2.o ...
 To use these with main.cpp, you must include `file#.o` when compiling main.
 
 ## Compiling main
-`$ clang++-10 main.cpp output.o -o main`  
+`$ clang++-13 main.cpp output.o -o main`  
 `main.cpp` contains a main function that will call the functions defined in `output.o`
 
 ## Running the code
@@ -38,3 +38,15 @@ extern "C" {
 ```
 where `double` is repeated n times.  
 Now we can call `foo(-1, 3, ..., 93)`, for example.
+
+## Example
+`bool_ops` contains Kaleidoscope functions that test the `==, !=, <, >, <=,` and `>=` operators.  
+`bool_ops_test.cpp` contains C++ code to run the functions on `bool_ops`.  
+1 ``$ clang++-13 -g -O3 toy.cpp `llvm-config-13 --cxxflags --ldflags --system-libs --libs all` -o toy``  
+2 `$ cat bool_ops | ./toy`  
+3 `$ clang++-13 bool_ops_test.cpp output.o -o bool_ops_test`  
+OR  
+2 `$ sh parse.sh bool_ops`  
+3 `$ clang++-13 bool_ops_test.cpp bool_ops.o -o bool_ops_test`  
+4 `$ ./bool_ops_test`  
+Manually verify that the operation results are correct.
