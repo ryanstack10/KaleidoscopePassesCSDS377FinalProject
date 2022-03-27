@@ -2,8 +2,8 @@
 
 ## Overview of files
 `toy.cpp` contains the Kaleidoscope source code.  
-`file` refers to an arbitrary file input for the Kaleidoscope parser.  
-`main.cpp` refers to code written by the user that uses functions defined in `file`
+`file` refers to an arbitrary text file input for the Kaleidoscope parser.  
+`main.cpp` refers to an aribtrary c++ file written by the user that uses functions defined in `file`
 
 ## Compile toy.cpp
 ``$ clang++-13 -g -O3 toy.cpp `llvm-config-13 --cxxflags --ldflags --system-libs --libs all` -o toy``  
