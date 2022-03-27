@@ -2,4 +2,4 @@
 !.gitignore
 !*.cpp
 !*.sh
-!ops_test
+!ops_test.txt

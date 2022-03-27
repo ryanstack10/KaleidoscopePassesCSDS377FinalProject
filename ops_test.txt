@@ -11,6 +11,6 @@ def le (x y)
 def ge (x y)
 	x >= y;
 def inv (x)
-    !x;
+	!x;
 def neg (x)
-    -x;
+	-x;
