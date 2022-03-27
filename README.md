@@ -41,7 +41,7 @@ Now we can call `foo(-1, 3, ..., 93)`, for example.
 
 ## Example
 `ops_test.txt` contains Kaleidoscope functions that test the `==, !=, <, >, <=, >=, !,` and `-` operators.  
-`ops_test.cpp` contains C++ code to run the functions on `ops_test`.  
+`ops_test.cpp` contains C++ code to run the functions in `ops_test.txt`.  
 1 ``$ clang++-13 -g -O3 toy.cpp `llvm-config-13 --cxxflags --ldflags --system-libs --libs all` -o toy``  
 2 `$ cat ops_test.txt | ./toy`  
 3 `$ clang++-13 ops_test.cpp output.o -o ops_test`  
