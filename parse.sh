@@ -6,11 +6,11 @@ fi
 
 for ARG in $@
 do
-	echo "\$cat $ARG | ./toy"
+	echo "\$ cat $ARG | ./toy"
 	cat $ARG | ./toy
 
 	OUTPUT=${ARG%.*}.o
-	echo "\n\$mv output.o $OUTPUT"
+	echo "\n\$ mv output.o $OUTPUT"
 	mv output.o $OUTPUT
-	echo "Moved output to $OUTPUT"
+	echo "Moved output to $OUTPUT\n\n"
 done

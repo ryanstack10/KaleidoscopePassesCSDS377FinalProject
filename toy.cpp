@@ -26,6 +26,7 @@
 #include <cstdlib>
 #include <map>
 #include <memory>
+#include <set>
 #include <string>
 #include <system_error>
 #include <utility>
@@ -63,9 +64,16 @@ enum Token {
   tok_unary = -12,
 
   // var definition
-  tok_var = -13
+  tok_var = -13,
+
+  // multicharacter operators
+  tok_eq = -14,
+  tok_ne = -15,
+  tok_le = -16,
+  tok_ge = -17
 };
 
+static std::string OperatorStr;   // Filled in if operator
 static std::string IdentifierStr; // Filled in if tok_identifier
 static double NumVal;             // Filled in if tok_number
 
@@ -104,6 +112,25 @@ static int gettok() {
       return tok_var;
     return tok_identifier;
   }
+
+  // 2-character operators
+  OperatorStr = LastChar;
+  OperatorStr += getchar();
+  LastChar = getchar();
+  if (OperatorStr == "==")
+    return tok_eq;
+  if (OperatorStr == "!=")
+    return tok_ne;
+  if (OperatorStr == "<=")
+    return tok_le;
+  if (OperatorStr == ">=")
+    return tok_ge;
+  // Put back characters
+  ungetc(LastChar, stdin);
+  for (int i = OperatorStr.length() - 1; i >= 1; i--) {
+    ungetc(OperatorStr.at(i), stdin);
+  }
+  LastChar = OperatorStr.at(0);
 
   if (isdigit(LastChar) || LastChar == '.') { // Number: [0-9.]+
     std::string NumStr;
@@ -307,17 +334,30 @@ static int getNextToken() { return CurTok = gettok(); }
 /// BinopPrecedence - This holds the precedence for each binary operator that is
 /// defined.
 static std::map<char, int> BinopPrecedence;
+/// UnaryOperators - This holds all the unary operators that are defined
+static std::set<int> UnaryOperators;
 
 /// GetTokPrecedence - Get the precedence of the pending binary operator token.
 static int GetTokPrecedence() {
-  if (!isascii(CurTok))
-    return -1;
+  auto it = BinopPrecedence.find(CurTok);
+  return it == BinopPrecedence.end() || it->second <= 0 ? -1
+         : it->second;
+}
 
-  // Make sure it's a declared binop.
-  int TokPrec = BinopPrecedence[CurTok];
-  if (TokPrec <= 0)
-    return -1;
-  return TokPrec;
+/// IsBinaryOp - Returns true iff the current token is a binary operator
+static bool IsBinaryOp() {
+  return GetTokPrecedence() != -1;
+}
+
+/// IsUnaryOp - Returns true iff the current is a unary operator
+static bool IsUnaryOp() {
+  auto it = UnaryOperators.find(CurTok);
+  return it != UnaryOperators.end();
+}
+
+/// IsUnaryOp - Returns true iff the current is an operator
+static bool IsOperator() {
+  return IsBinaryOp() || IsUnaryOp();
 }
 
 /// LogError* - These are little helper functions for error handling.
@@ -544,8 +584,11 @@ static std::unique_ptr<ExprAST> ParsePrimary() {
 ///   ::= '!' unary
 static std::unique_ptr<ExprAST> ParseUnary() {
   // If the current token is not an operator, it must be a primary expr.
-  if (!isascii(CurTok) || CurTok == '(' || CurTok == ',')
+  if (!IsOperator()) {
+    printf("ParseUnary -> ParsePrimary\n");
     return ParsePrimary();
+  }
+  printf("Genuine Primary: %d", CurTok);
 
   // If this is a unary operator, read it.
   int Opc = CurTok;
@@ -571,6 +614,7 @@ static std::unique_ptr<ExprAST> ParseBinOpRHS(int ExprPrec,
     // Okay, we know this is a binop.
     int BinOp = CurTok;
     getNextToken(); // eat binop
+    printf("Next: %d\n", CurTok);
 
     // Parse the unary expression after the binary operator.
     auto RHS = ParseUnary();
@@ -588,7 +632,7 @@ static std::unique_ptr<ExprAST> ParseBinOpRHS(int ExprPrec,
 
     // Merge LHS/RHS.
     LHS =
-        std::make_unique<BinaryExprAST>(BinOp, std::move(LHS), std::move(RHS));
+      std::make_unique<BinaryExprAST>(BinOp, std::move(LHS), std::move(RHS));
   }
 }
 
@@ -600,6 +644,7 @@ static std::unique_ptr<ExprAST> ParseExpression() {
   if (!LHS)
     return nullptr;
 
+  printf("Made it %d\n", CurTok);
   return ParseBinOpRHS(0, std::move(LHS));
 }
 
@@ -623,7 +668,7 @@ static std::unique_ptr<PrototypeAST> ParsePrototype() {
     break;
   case tok_unary:
     getNextToken();
-    if (!isascii(CurTok))
+    if (!IsUnaryOp())
       return LogErrorP("Expected unary operator");
     FnName = "unary";
     FnName += (char)CurTok;
@@ -632,7 +677,7 @@ static std::unique_ptr<PrototypeAST> ParsePrototype() {
     break;
   case tok_binary:
     getNextToken();
-    if (!isascii(CurTok))
+    if (!IsBinaryOp())
       return LogErrorP("Expected binary operator");
     FnName = "binary";
     FnName += (char)CurTok;
@@ -800,10 +845,21 @@ Value *BinaryExprAST::codegen() {
     return Builder->CreateFSub(L, R, "subtmp");
   case '*':
     return Builder->CreateFMul(L, R, "multmp");
-  case '<':
-    L = Builder->CreateFCmpULT(L, R, "cmptmp");
+  // Boolean operators
+  case tok_eq: case tok_ne:
+  case '<': case '>':
+  case tok_le: case tok_ge:
+    L = Op == tok_eq ? Builder->CreateFCmpUEQ(L, R, "eqtmp") :
+        Op == tok_ne ? Builder->CreateFCmpUNE(L, R, "netmp") :
+        Op == '<' ? Builder->CreateFCmpULT(L, R, "lttmp") :
+        Op == '>' ? Builder->CreateFCmpUGT(L, R, "gttmp") :
+        Op == tok_le ? Builder->CreateFCmpULE(L, R, "letmp") :
+        Builder->CreateFCmpUGE(L, R, "getmp");
+
     // Convert bool 0/1 to double 0.0 or 1.0
     return Builder->CreateUIToFP(L, Type::getDoubleTy(*TheContext), "booltmp");
+  case ':': // ':' opperator combines L and R into one statement
+	return R;
   default:
     break;
   }
@@ -1202,9 +1258,19 @@ extern "C" DLLEXPORT double printd(double X) {
 //===----------------------------------------------------------------------===//
 
 int main() {
+  // Install standard unary operators.
+  //UnaryOperators.insert('!');
+
   // Install standard binary operators.
   // 1 is lowest precedence.
+  BinopPrecedence[':'] = 1; // ':' is used to combine two statements into one
+  BinopPrecedence['='] = 2;
+  BinopPrecedence[Token::tok_eq] = 5;
+  BinopPrecedence[Token::tok_ne] = 5;
   BinopPrecedence['<'] = 10;
+  BinopPrecedence['>'] = 10;
+  BinopPrecedence[Token::tok_le] = 10;
+  BinopPrecedence[Token::tok_ge] = 10;
   BinopPrecedence['+'] = 20;
   BinopPrecedence['-'] = 20;
   BinopPrecedence['*'] = 40; // highest.

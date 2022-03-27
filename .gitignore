@@ -2,4 +2,4 @@
 !.gitignore
 !*.cpp
 !*.sh
-!example_input
+!bool_ops
