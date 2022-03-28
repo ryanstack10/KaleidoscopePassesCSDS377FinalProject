@@ -33,6 +33,9 @@
 #include <utility>
 #include <vector>
 
+// Include you pass here
+#include "example_pass.cpp"
+
 using namespace llvm;
 using namespace llvm::sys;
 
@@ -1318,6 +1321,9 @@ int main() {
 
   // Run the main "interpreter loop" now.
   MainLoop();
+
+  // Call your pass here
+  ExamplePass(TheModuleAST.get());
 
   TheModuleAST->codegen();
 

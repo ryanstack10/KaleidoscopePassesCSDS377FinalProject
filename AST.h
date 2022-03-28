@@ -1,3 +1,6 @@
+#ifndef AST_H
+#define AST_H
+
 #include "llvm/IR/Value.h"
 #include <map>
 #include <memory>
@@ -22,9 +25,9 @@ public:
 
 /// NumberExprAST - Expression class for numeric literals like "1.0".
 class NumberExprAST : public ExprAST {
+public:
   double Val;
 
-public:
   NumberExprAST(double Val) : Val(Val) {}
 
   Value *codegen() override;
@@ -32,9 +35,9 @@ public:
 
 /// VariableExprAST - Expression class for referencing a variable, like "a".
 class VariableExprAST : public ExprAST {
+public:
   std::string Name;
 
-public:
   VariableExprAST(const std::string &Name) : Name(Name) {}
 
   Value *codegen() override;
@@ -43,10 +46,10 @@ public:
 
 /// UnaryExprAST - Expression class for a unary operator.
 class UnaryExprAST : public ExprAST {
+public:
   char Opcode;
   std::unique_ptr<ExprAST> Operand;
 
-public:
   UnaryExprAST(char Opcode, std::unique_ptr<ExprAST> Operand)
       : Opcode(Opcode), Operand(std::move(Operand)) {}
 
@@ -55,10 +58,10 @@ public:
 
 /// BinaryExprAST - Expression class for a binary operator.
 class BinaryExprAST : public ExprAST {
+public:
   char Op;
   std::unique_ptr<ExprAST> LHS, RHS;
 
-public:
   BinaryExprAST(char Op, std::unique_ptr<ExprAST> LHS,
                 std::unique_ptr<ExprAST> RHS)
       : Op(Op), LHS(std::move(LHS)), RHS(std::move(RHS)) {}
@@ -68,10 +71,10 @@ public:
 
 /// CallExprAST - Expression class for function calls.
 class CallExprAST : public ExprAST {
+public:
   std::string Callee;
   std::vector<std::unique_ptr<ExprAST>> Args;
 
-public:
   CallExprAST(const std::string &Callee,
               std::vector<std::unique_ptr<ExprAST>> Args)
       : Callee(Callee), Args(std::move(Args)) {}
@@ -81,9 +84,9 @@ public:
 
 /// IfExprAST - Expression class for if/then/else.
 class IfExprAST : public ExprAST {
+public:
   std::unique_ptr<ExprAST> Cond, Then, Else;
 
-public:
   IfExprAST(std::unique_ptr<ExprAST> Cond, std::unique_ptr<ExprAST> Then,
             std::unique_ptr<ExprAST> Else)
       : Cond(std::move(Cond)), Then(std::move(Then)), Else(std::move(Else)) {}
@@ -93,10 +96,10 @@ public:
 
 /// ForExprAST - Expression class for for/in.
 class ForExprAST : public ExprAST {
+public:
   std::string VarName;
   std::unique_ptr<ExprAST> Start, End, Step, Body;
 
-public:
   ForExprAST(const std::string &VarName, std::unique_ptr<ExprAST> Start,
              std::unique_ptr<ExprAST> End, std::unique_ptr<ExprAST> Step,
              std::unique_ptr<ExprAST> Body)
@@ -108,10 +111,10 @@ public:
 
 /// VarExprAST - Expression class for var/in
 class VarExprAST : public ExprAST {
+public:
   std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames;
   std::unique_ptr<ExprAST> Body;
 
-public:
   VarExprAST(
       std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
       std::unique_ptr<ExprAST> Body)
@@ -124,12 +127,12 @@ public:
 /// which captures its name, and its argument names (thus implicitly the number
 /// of arguments the function takes), as well as if it is an operator.
 class PrototypeAST {
+public:
   std::string Name;
   std::vector<std::string> Args;
   int Operator;
   unsigned Precedence; // Precedence if a binary op.
 
-public:
   PrototypeAST(const std::string &Name, std::vector<std::string> Args,
                int Operator = -1, unsigned Prec = 0)
       : Name(Name), Args(std::move(Args)), Operator(Operator),
@@ -151,11 +154,10 @@ public:
 
 /// FunctionAST - This class represents a function definition itself.
 class FunctionAST {
-  friend class ModuleAST;
+public:
   std::unique_ptr<PrototypeAST> Proto;
   std::unique_ptr<ExprAST> Body;
 
-public:
   FunctionAST(std::unique_ptr<PrototypeAST> Proto,
               std::unique_ptr<ExprAST> Body)
       : Proto(std::move(Proto)), Body(std::move(Body)) {}
@@ -167,13 +169,13 @@ public:
 
 /// ModuleAST - This class represents all functions/externs within a file or section of code
 class ModuleAST {
-  // Mapes function name to function prototype
+public:
+  // Maps function name to function prototype
   std::map<std::string, std::unique_ptr<PrototypeAST>> Externs;
   // bool = true if the function is a definition
   //      = false if the function is a top-level expression
   std::map<std::string, std::pair<std::unique_ptr<FunctionAST>, bool>> Functions;
 
-public:
   ModuleAST() = default;
 
   // Returns a string of codegen for every extern/function
@@ -189,3 +191,4 @@ public:
 
 } // end anonymous namespace
 
+#endif /* AST_H */
