@@ -7,6 +7,7 @@ LLVM Kaleidoscope tutorial: https://llvm.org/docs/tutorial/
 `llvm 12/13`
 
 ## Compile toy.cpp
+`AST.h` contains the class definitions for the abstract syntax tree (AST).  
 `toy.cpp` contains the modified Kaleidoscope ch. 8 source code.  
 ```
 $ clang++ -g -O3 toy.cpp `llvm-config --cxxflags --ldflags --system-libs --libs all` -o toy
@@ -69,3 +70,9 @@ Manually verify that the operation results are correct.
 In `toy.cpp`, there is a function called `MainLoop()`. This function parses `stdin` and produces an AST. This AST is stored in a global `ModuleAST` variable called `TheModuleAST`. The `ModuleAST` contains all externs and functions defined in the parsed input. Implement passes by traversing and modifying the AST.  
 When your pass is complete, call `TheModuleAST->codegen()` to generate LLVM assembly code. The code will automatically print to the terminal.  
 Finally, call `GenObjectCode()` to write the LLVM assembly code to `output.o` as object code.
+
+## Example Pass Implementation
+In `example_pass.cpp`, we include `AST.h` so that we have the entire structure of the AST. Then we define a function `ExamplePass()` that takes a `ModuleAST*` as an argument. We implement our pass in `ExamplePass()`.  
+Now we have a pass defined, we need to use it. In `toy.cpp`, we add `#include "example_pass.cpp"` next to the other `#include` statements. This lets us call `ExamplePass()`. In main, we call `ExamplePass(TheModuleAST.get());` between `MainLoop()` and `TheModuleAST->codegen()`. This implements the pass as described above.  
+This is one way to implement a pass. Feel free to mess with the code as much as you want to design a different implementation.  
+Now we can compile and run the parser like normal.
