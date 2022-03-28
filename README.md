@@ -64,3 +64,8 @@ OR
 (3) `$ clang++ ops_test.cpp ops_test.o -o ops_test`  
 (4) `$ ./ops_test`  
 Manually verify that the operation results are correct.
+
+## Implementing Passes
+In `toy.cpp`, there is a function called `MainLoop()`. This function parses `stdin` and produces an AST. This AST is stored in a global `ModuleAST` variable called `TheModuleAST`. The `ModuleAST` contains all externs and functions defined in the parsed input. Implement passes by traversing and modifying the AST.  
+When your pass is complete, call `TheModuleAST->codegen()` to generate LLVM assembly code. The code will automatically print to the terminal.  
+Finally, call `GenObjectCode()` to write the LLVM assembly code to `output.o` as object code.
