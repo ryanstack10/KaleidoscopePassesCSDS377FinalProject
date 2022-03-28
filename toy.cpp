@@ -27,7 +27,6 @@
 #include <map>
 #include <memory>
 #include <set>
-#include <sstream>
 #include <string>
 #include <system_error>
 #include <utility>
@@ -415,7 +414,7 @@ class ModuleAST {
   std::map<std::string, std::pair<std::unique_ptr<FunctionAST>, bool>> Functions;
 
 public:
-  ModuleAST() {}
+  ModuleAST() = default;
 
   // Returns a string of codegen for every extern/function
   void codegen();
@@ -436,7 +435,8 @@ public:
   }
   // Transfers ownership of the FunctionAST to ModuleAST
   void addFunction(std::unique_ptr<FunctionAST> Function, bool isDefinition) {
-    Functions[Function->getName()] = std::make_pair(std::move(Function), isDefinition);
+    std::string name = Function->getName();
+    Functions[name] = std::make_pair(std::move(Function), isDefinition);
   }
 };
 
@@ -1260,14 +1260,13 @@ Function *FunctionAST::codegen() {
 }
 
 void ModuleAST::codegen() {
-  std::stringstream ss;
   for (auto& pair : Externs) {
     auto& Proto = pair.second;
     if (auto *FnIR = Proto->codegen()) { // Extern
       fprintf(stderr, "Codegen extern: ");
       FnIR->print(errs());
       fprintf(stderr, "\n");
-    }   
+    } else { fprintf(stderr, "Failed: %s\n", Proto->getName().c_str()); }
   }
   for (auto& pair : Functions) {
     bool isDef = pair.second.second;
@@ -1275,10 +1274,10 @@ void ModuleAST::codegen() {
     if (!isDef) { // Top-level expression
       Func->codegen();
     } else if (auto *FnIR = Func->codegen()) { // Definition
-      fprintf(stderr, "Codegen function definition:");
+      fprintf(stderr, "Codegen function: ");
       FnIR->print(errs());
       fprintf(stderr, "\n");
-    }
+    } else { fprintf(stderr, "Failed: %s\n", Func->getName().c_str()); }
   }
 }
 
