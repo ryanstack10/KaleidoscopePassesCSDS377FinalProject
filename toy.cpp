@@ -27,6 +27,7 @@
 #include <map>
 #include <memory>
 #include <set>
+#include <sstream>
 #include <string>
 #include <system_error>
 #include <utility>
@@ -72,6 +73,80 @@ enum Token {
   tok_le = -16,
   tok_ge = -17
 };
+
+/// OPERATORS
+/// BinopPrecedence - This holds the precedence for each binary operator that is
+/// defined.
+static std::map<int, int> BinopPrecedence;
+static std::map<int, std::string> BinopNames;
+/// UnopNames - This holds all the unary operators that are defined an their names
+static std::map<int, std::string> UnopNames;
+
+/// AddBinaryOp - Registers a new binary operator
+static void AddBinaryOp(int tok, std::string name, int prec = 40) {
+  BinopPrecedence[tok] = prec;
+  BinopNames[tok] = name;
+}
+static void AddBinaryOp(char tok, int prec = 40) {
+  BinopPrecedence[tok] = prec;
+  BinopNames[tok] = tok;
+}
+
+static void RemoveBinaryOp(int tok) {
+  auto it = BinopPrecedence.find(tok);
+  if (it != BinopPrecedence.end())
+    BinopPrecedence.erase(it);
+  auto it2 = BinopNames.find(tok);
+  if (it2 != BinopNames.end())
+    BinopNames.erase(it2);
+}
+
+/// AddUnaryOp - Registers a new unary operator
+static void AddUnaryOp(int tok, std::string name) {
+  UnopNames[tok] = name;
+}
+static void AddUnaryOp(char tok) {
+  UnopNames[tok] = tok;
+}
+
+static void RemoveUnaryOp(int tok) {
+  auto it = UnopNames.find(tok);
+  if (it != UnopNames.end())
+    UnopNames.erase(it);
+}
+
+/// GetTokPrecedence - Get the precedence of the pending binary operator token.
+static int GetTokPrecedence(int tok) {
+  auto it = BinopPrecedence.find(tok);
+  return it == BinopPrecedence.end() || it->second <= 0 ? -1
+         : it->second;
+}
+
+/// IsBinaryOp - Returns true iff the current token is a binary operator
+static bool IsBinaryOp(int tok) {
+  return GetTokPrecedence(tok) != -1;
+}
+
+/// IsUnaryOp - Returns true iff the current is a unary operator
+static bool IsUnaryOp(int tok) {
+  auto it = UnopNames.find(tok);
+  return it != UnopNames.end();
+}
+
+/// IsUnaryOp - Returns true iff the current is an operator
+static bool IsOperator(int tok) {
+  return IsBinaryOp(tok) || IsUnaryOp(tok);
+}
+
+static std::string getBinopName(int tok) {
+  auto it = BinopNames.find(tok);
+  return it == BinopNames.end() ? "" : it->second;
+}
+
+static std::string getUnopName(int tok) {
+  auto it = UnopNames.find(tok);
+  return it == UnopNames.end() ? "" : it->second;
+}
 
 static std::string OperatorStr;   // Filled in if operator
 static std::string IdentifierStr; // Filled in if tok_identifier
@@ -299,9 +374,17 @@ public:
   bool isUnaryOp() const { return isOperator() && Args.size() == 1; }
   bool isBinaryOp() const { return isOperator() && Args.size() == 2; }
 
-  int getOperatorName() const {
+  int getOperator() const {
     assert(isUnaryOp() || isBinaryOp());
     return Operator;
+  }
+
+  std::string getOperatorName() const {
+    assert(isUnaryOp() || isBinaryOp());
+    if (isUnaryOp())
+      return getUnopName(Operator);
+    else
+      return getBinopName(Operator);
   }
 
   unsigned getBinaryPrecedence() const { return Precedence; }
@@ -309,6 +392,7 @@ public:
 
 /// FunctionAST - This class represents a function definition itself.
 class FunctionAST {
+  friend class ModuleAST;
   std::unique_ptr<PrototypeAST> Proto;
   std::unique_ptr<ExprAST> Body;
 
@@ -317,7 +401,43 @@ public:
               std::unique_ptr<ExprAST> Body)
       : Proto(std::move(Proto)), Body(std::move(Body)) {}
 
+  const std::string& getName() { return Proto->getName(); }
+
   Function *codegen();
+};
+
+/// ModuleAST - This class represents all functions/externs within a file or section of code
+class ModuleAST {
+  // Mapes function name to function prototype
+  std::map<std::string, std::unique_ptr<PrototypeAST>> Externs;
+  // bool = true if the function is a definition
+  //      = false if the function is a top-level expression
+  std::map<std::string, std::pair<std::unique_ptr<FunctionAST>, bool>> Functions;
+
+public:
+  ModuleAST() {}
+
+  // Returns a string of codegen for every extern/function
+  void codegen();
+
+  PrototypeAST* getFunctionProto(std::string name) {
+    auto fIt = Functions.find(name);
+    if (fIt != Functions.end())
+      return fIt->second.first->Proto.get();
+    auto eIt = Externs.find(name);
+    if (eIt != Externs.end())
+      return eIt->second.get();
+    return nullptr;
+  }
+
+  // Transfers ownership of the Extern PrototypeAST to ModuleAST
+  void addExtern(std::unique_ptr<PrototypeAST> Extern) {
+    Externs[Extern->getName()] = std::move(Extern);
+  }
+  // Transfers ownership of the FunctionAST to ModuleAST
+  void addFunction(std::unique_ptr<FunctionAST> Function, bool isDefinition) {
+    Functions[Function->getName()] = std::make_pair(std::move(Function), isDefinition);
+  }
 };
 
 } // end anonymous namespace
@@ -331,35 +451,6 @@ public:
 /// lexer and updates CurTok with its results.
 static int CurTok;
 static int getNextToken() { return CurTok = gettok(); }
-
-/// BinopPrecedence - This holds the precedence for each binary operator that is
-/// defined.
-static std::map<char, int> BinopPrecedence;
-/// UnaryOperators - This holds all the unary operators that are defined
-static std::set<int> UnaryOperators;
-
-/// GetTokPrecedence - Get the precedence of the pending binary operator token.
-static int GetTokPrecedence() {
-  auto it = BinopPrecedence.find(CurTok);
-  return it == BinopPrecedence.end() || it->second <= 0 ? -1
-         : it->second;
-}
-
-/// IsBinaryOp - Returns true iff the current token is a binary operator
-static bool IsBinaryOp() {
-  return GetTokPrecedence() != -1;
-}
-
-/// IsUnaryOp - Returns true iff the current is a unary operator
-static bool IsUnaryOp() {
-  auto it = UnaryOperators.find(CurTok);
-  return it != UnaryOperators.end();
-}
-
-/// IsUnaryOp - Returns true iff the current is an operator
-static bool IsOperator() {
-  return IsBinaryOp() || IsUnaryOp();
-}
 
 /// LogError* - These are little helper functions for error handling.
 std::unique_ptr<ExprAST> LogError(const char *Str) {
@@ -585,7 +676,7 @@ static std::unique_ptr<ExprAST> ParsePrimary() {
 ///   ::= '!' unary
 static std::unique_ptr<ExprAST> ParseUnary() {
   // If the current token is not an operator, it must be a primary expr.
-  if (!IsOperator())
+  if (!IsOperator(CurTok))
     return ParsePrimary();
 
   // If this is a unary operator, read it.
@@ -602,7 +693,7 @@ static std::unique_ptr<ExprAST> ParseBinOpRHS(int ExprPrec,
                                               std::unique_ptr<ExprAST> LHS) {
   // If this is a binop, find its precedence.
   while (true) {
-    int TokPrec = GetTokPrecedence();
+    int TokPrec = GetTokPrecedence(CurTok);
 
     // If this is a binop that binds at least as tightly as the current binop,
     // consume it, otherwise we are done.
@@ -620,7 +711,7 @@ static std::unique_ptr<ExprAST> ParseBinOpRHS(int ExprPrec,
 
     // If BinOp binds less tightly with RHS than the operator after RHS, let
     // the pending operator take RHS as its LHS.
-    int NextPrec = GetTokPrecedence();
+    int NextPrec = GetTokPrecedence(CurTok);
     if (TokPrec < NextPrec) {
       RHS = ParseBinOpRHS(TokPrec + 1, std::move(RHS));
       if (!RHS)
@@ -653,7 +744,7 @@ static std::unique_ptr<PrototypeAST> ParsePrototype() {
 
   int Tok = -1; // For operators
   unsigned Kind = 0; // 0 = identifier, 1 = unary, 2 = binary.
-  unsigned BinaryPrecedence = 30;
+  unsigned BinaryPrecedence = 40;
 
   switch (CurTok) {
   default:
@@ -671,7 +762,7 @@ static std::unique_ptr<PrototypeAST> ParsePrototype() {
     FnName += (char)CurTok;
     Kind = 1;
     Tok = CurTok;
-    UnaryOperators.insert(Tok);
+    AddUnaryOp((char)CurTok);
     getNextToken();
     break;
   case tok_binary:
@@ -691,7 +782,7 @@ static std::unique_ptr<PrototypeAST> ParsePrototype() {
       BinaryPrecedence = (unsigned)NumVal;
       getNextToken();
     }
-    BinopPrecedence[Tok] = BinaryPrecedence;
+    AddBinaryOp((char)Tok, BinaryPrecedence);
 
     break;
   }
@@ -753,7 +844,7 @@ static std::unique_ptr<LLVMContext> TheContext;
 static std::unique_ptr<Module> TheModule;
 static std::unique_ptr<IRBuilder<>> Builder;
 static std::map<std::string, AllocaInst *> NamedValues;
-static std::map<std::string, std::unique_ptr<PrototypeAST>> FunctionProtos;
+static std::unique_ptr<ModuleAST> TheModuleAST;
 static ExitOnError ExitOnErr;
 
 Value *LogErrorV(const char *Str) {
@@ -768,9 +859,8 @@ Function *getFunction(std::string Name) {
 
   // If not, check whether we can codegen the declaration from some existing
   // prototype.
-  auto FI = FunctionProtos.find(Name);
-  if (FI != FunctionProtos.end())
-    return FI->second->codegen();
+  if (auto FI = TheModuleAST->getFunctionProto(Name))
+    return FI->codegen();
 
   // If no existing prototype exists, return null.
   return nullptr;
@@ -1127,10 +1217,7 @@ Function *PrototypeAST::codegen() {
 }
 
 Function *FunctionAST::codegen() {
-  // Transfer ownership of the prototype to the FunctionProtos map, but keep a
-  // reference to it for use below.
   auto &P = *Proto;
-  FunctionProtos[Proto->getName()] = std::move(Proto);
   Function *TheFunction = getFunction(P.getName());
   if (!TheFunction)
     return nullptr;
@@ -1166,8 +1253,33 @@ Function *FunctionAST::codegen() {
   TheFunction->eraseFromParent();
 
   if (P.isBinaryOp())
-    BinopPrecedence.erase(P.getOperatorName());
+    RemoveBinaryOp(P.getOperator());
+  else if (P.isUnaryOp())
+    RemoveUnaryOp(P.getOperator());
   return nullptr;
+}
+
+void ModuleAST::codegen() {
+  std::stringstream ss;
+  for (auto& pair : Externs) {
+    auto& Proto = pair.second;
+    if (auto *FnIR = Proto->codegen()) { // Extern
+      fprintf(stderr, "Codegen extern: ");
+      FnIR->print(errs());
+      fprintf(stderr, "\n");
+    }   
+  }
+  for (auto& pair : Functions) {
+    bool isDef = pair.second.second;
+    auto& Func = pair.second.first;
+    if (!isDef) { // Top-level expression
+      Func->codegen();
+    } else if (auto *FnIR = Func->codegen()) { // Definition
+      fprintf(stderr, "Codegen function definition:");
+      FnIR->print(errs());
+      fprintf(stderr, "\n");
+    }
+  }
 }
 
 //===----------------------------------------------------------------------===//
@@ -1185,11 +1297,7 @@ static void InitializeModuleAndPassManager() {
 
 static void HandleDefinition() {
   if (auto FnAST = ParseDefinition()) {
-    if (auto *FnIR = FnAST->codegen()) {
-      fprintf(stderr, "Read function definition:");
-      FnIR->print(errs());
-      fprintf(stderr, "\n");
-    }
+    TheModuleAST->addFunction(std::move(FnAST), true);
   } else {
     // Skip token for error recovery.
     getNextToken();
@@ -1198,12 +1306,7 @@ static void HandleDefinition() {
 
 static void HandleExtern() {
   if (auto ProtoAST = ParseExtern()) {
-    if (auto *FnIR = ProtoAST->codegen()) {
-      fprintf(stderr, "Read extern: ");
-      FnIR->print(errs());
-      fprintf(stderr, "\n");
-      FunctionProtos[ProtoAST->getName()] = std::move(ProtoAST);
-    }
+    TheModuleAST->addExtern(std::move(ProtoAST));
   } else {
     // Skip token for error recovery.
     getNextToken();
@@ -1213,7 +1316,7 @@ static void HandleExtern() {
 static void HandleTopLevelExpression() {
   // Evaluate a top-level expression into an anonymous function.
   if (auto FnAST = ParseTopLevelExpr()) {
-    FnAST->codegen();
+    TheModuleAST->addFunction(std::move(FnAST), false);
   } else {
     // Skip token for error recovery.
     getNextToken();
@@ -1222,10 +1325,13 @@ static void HandleTopLevelExpression() {
 
 /// top ::= definition | external | expression | ';'
 static void MainLoop() {
-  while (true) {
+  TheModuleAST = std::make_unique<ModuleAST>();
+  bool parsing = true;
+  while (parsing) {
     switch (CurTok) {
     case tok_eof:
-      return;
+      parsing = false;
+      break;
     case ';': // ignore top-level semicolons.
       getNextToken();
       break;
@@ -1270,22 +1376,22 @@ extern "C" DLLEXPORT double printd(double X) {
 
 int main() {
   // Install standard unary operators.
-  UnaryOperators.insert('!');
-  UnaryOperators.insert('-');
+  AddUnaryOp('!');
+  AddUnaryOp('-');
 
   // Install standard binary operators.
   // 1 is lowest precedence.
-  BinopPrecedence[':'] = 1; // ':' is used to combine two statements into one
-  BinopPrecedence['='] = 2;
-  BinopPrecedence[Token::tok_eq] = 5;
-  BinopPrecedence[Token::tok_ne] = 5;
-  BinopPrecedence['<'] = 10;
-  BinopPrecedence['>'] = 10;
-  BinopPrecedence[Token::tok_le] = 10;
-  BinopPrecedence[Token::tok_ge] = 10;
-  BinopPrecedence['+'] = 20;
-  BinopPrecedence['-'] = 20;
-  BinopPrecedence['*'] = 40; // highest.
+  AddBinaryOp(':', 1); // ':' is used to combine two statements into one
+  AddBinaryOp('=', 2);
+  AddBinaryOp(Token::tok_eq, "==", 5);
+  AddBinaryOp(Token::tok_ne, "!=", 5);
+  AddBinaryOp('<', 10);
+  AddBinaryOp('>', 10);
+  AddBinaryOp(Token::tok_le, "<=", 10);
+  AddBinaryOp(Token::tok_ge, ">=", 10);
+  AddBinaryOp('+', 20);
+  AddBinaryOp('-', 20);
+  AddBinaryOp('*', 40); // highest.
 
   // Prime the first token.
   fprintf(stderr, "ready> ");
@@ -1295,6 +1401,8 @@ int main() {
 
   // Run the main "interpreter loop" now.
   MainLoop();
+
+  TheModuleAST->codegen();
 
   // Initialize the target registry etc.
   InitializeAllTargetInfos();
