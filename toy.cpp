@@ -1,3 +1,4 @@
+#include "AST.h"
 #include "llvm/ADT/APFloat.h"
 #include "llvm/ADT/Optional.h"
 #include "llvm/ADT/STLExtras.h"
@@ -238,209 +239,69 @@ static int gettok() {
 }
 
 //===----------------------------------------------------------------------===//
-// Abstract Syntax Tree (aka Parse Tree)
+// AST Implementation
 //===----------------------------------------------------------------------===//
+/// VaraibleExprAST
+const std::string &VariableExprAST::getName() const {
+  return Name;
+}
 
-namespace {
 
-/// ExprAST - Base class for all expression nodes.
-class ExprAST {
-public:
-  virtual ~ExprAST() = default;
+/// PrototypeAST
+const std::string &PrototypeAST::getName() const { return Name; }
 
-  virtual Value *codegen() = 0;
-};
+bool PrototypeAST::isOperator() const {
+  return Operator != -1;
+}
+bool PrototypeAST::isUnaryOp() const {
+  return isOperator() && Args.size() == 1;
+}
+bool PrototypeAST::isBinaryOp() const {
+  return isOperator() && Args.size() == 2;
+}
 
-/// NumberExprAST - Expression class for numeric literals like "1.0".
-class NumberExprAST : public ExprAST {
-  double Val;
+int PrototypeAST::getOperator() const {
+  assert(isUnaryOp() || isBinaryOp());
+  return Operator;
+}
 
-public:
-  NumberExprAST(double Val) : Val(Val) {}
+std::string PrototypeAST::getOperatorName() const {
+  assert(isUnaryOp() || isBinaryOp());
+  if (isUnaryOp())
+    return getUnopName(Operator);
+  else
+    return getBinopName(Operator);
+}
 
-  Value *codegen() override;
-};
+unsigned PrototypeAST::getBinaryPrecedence() const {
+  return Precedence;
+}
 
-/// VariableExprAST - Expression class for referencing a variable, like "a".
-class VariableExprAST : public ExprAST {
-  std::string Name;
+/// FunctionAST
+const std::string& FunctionAST::getName() {
+  return Proto->getName();
+}
 
-public:
-  VariableExprAST(const std::string &Name) : Name(Name) {}
+/// ModuleAST
+PrototypeAST* ModuleAST::getFunctionProto(std::string name) const {
+  auto fIt = Functions.find(name);
+  if (fIt != Functions.end())
+    return fIt->second.first->Proto.get();
+  auto eIt = Externs.find(name);
+  if (eIt != Externs.end())
+    return eIt->second.get();
+  return nullptr;
+}
 
-  Value *codegen() override;
-  const std::string &getName() const { return Name; }
-};
-
-/// UnaryExprAST - Expression class for a unary operator.
-class UnaryExprAST : public ExprAST {
-  char Opcode;
-  std::unique_ptr<ExprAST> Operand;
-
-public:
-  UnaryExprAST(char Opcode, std::unique_ptr<ExprAST> Operand)
-      : Opcode(Opcode), Operand(std::move(Operand)) {}
-
-  Value *codegen() override;
-};
-
-/// BinaryExprAST - Expression class for a binary operator.
-class BinaryExprAST : public ExprAST {
-  char Op;
-  std::unique_ptr<ExprAST> LHS, RHS;
-
-public:
-  BinaryExprAST(char Op, std::unique_ptr<ExprAST> LHS,
-                std::unique_ptr<ExprAST> RHS)
-      : Op(Op), LHS(std::move(LHS)), RHS(std::move(RHS)) {}
-
-  Value *codegen() override;
-};
-
-/// CallExprAST - Expression class for function calls.
-class CallExprAST : public ExprAST {
-  std::string Callee;
-  std::vector<std::unique_ptr<ExprAST>> Args;
-
-public:
-  CallExprAST(const std::string &Callee,
-              std::vector<std::unique_ptr<ExprAST>> Args)
-      : Callee(Callee), Args(std::move(Args)) {}
-
-  Value *codegen() override;
-};
-
-/// IfExprAST - Expression class for if/then/else.
-class IfExprAST : public ExprAST {
-  std::unique_ptr<ExprAST> Cond, Then, Else;
-
-public:
-  IfExprAST(std::unique_ptr<ExprAST> Cond, std::unique_ptr<ExprAST> Then,
-            std::unique_ptr<ExprAST> Else)
-      : Cond(std::move(Cond)), Then(std::move(Then)), Else(std::move(Else)) {}
-
-  Value *codegen() override;
-};
-
-/// ForExprAST - Expression class for for/in.
-class ForExprAST : public ExprAST {
-  std::string VarName;
-  std::unique_ptr<ExprAST> Start, End, Step, Body;
-
-public:
-  ForExprAST(const std::string &VarName, std::unique_ptr<ExprAST> Start,
-             std::unique_ptr<ExprAST> End, std::unique_ptr<ExprAST> Step,
-             std::unique_ptr<ExprAST> Body)
-      : VarName(VarName), Start(std::move(Start)), End(std::move(End)),
-        Step(std::move(Step)), Body(std::move(Body)) {}
-
-  Value *codegen() override;
-};
-
-/// VarExprAST - Expression class for var/in
-class VarExprAST : public ExprAST {
-  std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames;
-  std::unique_ptr<ExprAST> Body;
-
-public:
-  VarExprAST(
-      std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> VarNames,
-      std::unique_ptr<ExprAST> Body)
-      : VarNames(std::move(VarNames)), Body(std::move(Body)) {}
-
-  Value *codegen() override;
-};
-
-/// PrototypeAST - This class represents the "prototype" for a function,
-/// which captures its name, and its argument names (thus implicitly the number
-/// of arguments the function takes), as well as if it is an operator.
-class PrototypeAST {
-  std::string Name;
-  std::vector<std::string> Args;
-  int Operator;
-  unsigned Precedence; // Precedence if a binary op.
-
-public:
-  PrototypeAST(const std::string &Name, std::vector<std::string> Args,
-               int Operator = -1, unsigned Prec = 0)
-      : Name(Name), Args(std::move(Args)), Operator(Operator),
-        Precedence(Prec) {}
-
-  Function *codegen();
-  const std::string &getName() const { return Name; }
-
-  bool isOperator() const { return Operator != -1; }
-  bool isUnaryOp() const { return isOperator() && Args.size() == 1; }
-  bool isBinaryOp() const { return isOperator() && Args.size() == 2; }
-
-  int getOperator() const {
-    assert(isUnaryOp() || isBinaryOp());
-    return Operator;
-  }
-
-  std::string getOperatorName() const {
-    assert(isUnaryOp() || isBinaryOp());
-    if (isUnaryOp())
-      return getUnopName(Operator);
-    else
-      return getBinopName(Operator);
-  }
-
-  unsigned getBinaryPrecedence() const { return Precedence; }
-};
-
-/// FunctionAST - This class represents a function definition itself.
-class FunctionAST {
-  friend class ModuleAST;
-  std::unique_ptr<PrototypeAST> Proto;
-  std::unique_ptr<ExprAST> Body;
-
-public:
-  FunctionAST(std::unique_ptr<PrototypeAST> Proto,
-              std::unique_ptr<ExprAST> Body)
-      : Proto(std::move(Proto)), Body(std::move(Body)) {}
-
-  const std::string& getName() { return Proto->getName(); }
-
-  Function *codegen();
-};
-
-/// ModuleAST - This class represents all functions/externs within a file or section of code
-class ModuleAST {
-  // Mapes function name to function prototype
-  std::map<std::string, std::unique_ptr<PrototypeAST>> Externs;
-  // bool = true if the function is a definition
-  //      = false if the function is a top-level expression
-  std::map<std::string, std::pair<std::unique_ptr<FunctionAST>, bool>> Functions;
-
-public:
-  ModuleAST() = default;
-
-  // Returns a string of codegen for every extern/function
-  void codegen();
-
-  PrototypeAST* getFunctionProto(std::string name) {
-    auto fIt = Functions.find(name);
-    if (fIt != Functions.end())
-      return fIt->second.first->Proto.get();
-    auto eIt = Externs.find(name);
-    if (eIt != Externs.end())
-      return eIt->second.get();
-    return nullptr;
-  }
-
-  // Transfers ownership of the Extern PrototypeAST to ModuleAST
-  void addExtern(std::unique_ptr<PrototypeAST> Extern) {
-    Externs[Extern->getName()] = std::move(Extern);
-  }
-  // Transfers ownership of the FunctionAST to ModuleAST
-  void addFunction(std::unique_ptr<FunctionAST> Function, bool isDefinition) {
-    std::string name = Function->getName();
-    Functions[name] = std::make_pair(std::move(Function), isDefinition);
-  }
-};
-
-} // end anonymous namespace
+// Transfers ownership of the Extern PrototypeAST to ModuleAST
+void ModuleAST::addExtern(std::unique_ptr<PrototypeAST> Extern) {
+  Externs[Extern->getName()] = std::move(Extern);
+}
+// Transfers ownership of the FunctionAST to ModuleAST
+void ModuleAST::addFunction(std::unique_ptr<FunctionAST> Function, bool isDefinition) {
+  std::string name = Function->getName();
+  Functions[name] = std::make_pair(std::move(Function), isDefinition);
+}
 
 //===----------------------------------------------------------------------===//
 // Parser

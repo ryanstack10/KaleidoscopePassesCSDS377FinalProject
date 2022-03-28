@@ -1,5 +1,7 @@
 *
 !.gitignore
-!*.cpp
-!*.sh
+!toy.cpp
+!AST.h
+!parse.sh
 !ops_test.txt
+!ops_test.cpp
