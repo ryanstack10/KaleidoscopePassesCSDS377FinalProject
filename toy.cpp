@@ -283,24 +283,25 @@ public:
 class PrototypeAST {
   std::string Name;
   std::vector<std::string> Args;
-  bool IsOperator;
+  int Operator;
   unsigned Precedence; // Precedence if a binary op.
 
 public:
   PrototypeAST(const std::string &Name, std::vector<std::string> Args,
-               bool IsOperator = false, unsigned Prec = 0)
-      : Name(Name), Args(std::move(Args)), IsOperator(IsOperator),
+               int Operator = -1, unsigned Prec = 0)
+      : Name(Name), Args(std::move(Args)), Operator(Operator),
         Precedence(Prec) {}
 
   Function *codegen();
   const std::string &getName() const { return Name; }
 
-  bool isUnaryOp() const { return IsOperator && Args.size() == 1; }
-  bool isBinaryOp() const { return IsOperator && Args.size() == 2; }
+  bool isOperator() const { return Operator != -1; }
+  bool isUnaryOp() const { return isOperator() && Args.size() == 1; }
+  bool isBinaryOp() const { return isOperator() && Args.size() == 2; }
 
-  char getOperatorName() const {
+  int getOperatorName() const {
     assert(isUnaryOp() || isBinaryOp());
-    return Name[Name.size() - 1];
+    return Operator;
   }
 
   unsigned getBinaryPrecedence() const { return Precedence; }
@@ -650,6 +651,7 @@ static std::unique_ptr<ExprAST> ParseExpression() {
 static std::unique_ptr<PrototypeAST> ParsePrototype() {
   std::string FnName;
 
+  int Tok = -1; // For operators
   unsigned Kind = 0; // 0 = identifier, 1 = unary, 2 = binary.
   unsigned BinaryPrecedence = 30;
 
@@ -668,7 +670,8 @@ static std::unique_ptr<PrototypeAST> ParsePrototype() {
     FnName = "unary";
     FnName += (char)CurTok;
     Kind = 1;
-    UnaryOperators.insert((char)CurTok);
+    Tok = CurTok;
+    UnaryOperators.insert(Tok);
     getNextToken();
     break;
   case tok_binary:
@@ -678,7 +681,7 @@ static std::unique_ptr<PrototypeAST> ParsePrototype() {
     FnName = "binary";
     FnName += (char)CurTok;
     Kind = 2;
-    int& precedence = BinopPrecedence[(char)CurTok];
+    Tok = CurTok;
     getNextToken();
 
     // Read the precedence if present.
@@ -688,7 +691,7 @@ static std::unique_ptr<PrototypeAST> ParsePrototype() {
       BinaryPrecedence = (unsigned)NumVal;
       getNextToken();
     }
-    precedence = BinaryPrecedence;
+    BinopPrecedence[Tok] = BinaryPrecedence;
 
     break;
   }
@@ -709,7 +712,7 @@ static std::unique_ptr<PrototypeAST> ParsePrototype() {
   if (Kind && ArgNames.size() != Kind)
     return LogErrorP("Invalid number of operands for operator");
 
-  return std::make_unique<PrototypeAST>(FnName, ArgNames, Kind != 0,
+  return std::make_unique<PrototypeAST>(FnName, ArgNames, Tok,
                                          BinaryPrecedence);
 }
 
@@ -1131,10 +1134,6 @@ Function *FunctionAST::codegen() {
   Function *TheFunction = getFunction(P.getName());
   if (!TheFunction)
     return nullptr;
-
-  // If this is an operator, install it.
-  if (P.isBinaryOp())
-    BinopPrecedence[P.getOperatorName()] = P.getBinaryPrecedence();
 
   // Create a new basic block to start insertion into.
   BasicBlock *BB = BasicBlock::Create(*TheContext, "entry", TheFunction);
