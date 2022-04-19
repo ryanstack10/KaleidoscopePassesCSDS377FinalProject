@@ -35,6 +35,7 @@
 
 // Include you pass here
 #include "example_pass.cpp"
+#include "constant_folding.cpp"
 
 using namespace llvm;
 using namespace llvm::sys;
@@ -1323,7 +1324,7 @@ int main() {
   MainLoop();
 
   // Call your pass here
-  ExamplePass(TheModuleAST.get());
+  ConstantFold(TheModuleAST.get());
 
   TheModuleAST->codegen();
 
