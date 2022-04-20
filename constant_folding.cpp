@@ -32,6 +32,24 @@ static ExprAST* FoldExpression(ExprAST* Expression) {
     }
   }
 
+  // Check if this is a for loop
+  ForExprAST* forExpr = dynamic_cast<ForExprAST*>(Expression);
+  if (forExpr != nullptr) {
+    // Fold each component of the for-loop
+    ExprAST* newStart = FoldExpression(forExpr->Start.get());
+    forExpr->Start.release();
+    forExpr->Start.reset(newStart);
+    ExprAST* newEnd = FoldExpression(forExpr->End.get());
+    forExpr->End.release();
+    forExpr->End.reset(newEnd);
+    ExprAST* newStep = FoldExpression(forExpr->Step.get());
+    forExpr->Step.release();
+    forExpr->Step.reset(newStep);
+    ExprAST* newBody = FoldExpression(forExpr->Body.get());
+    forExpr->Body.release();
+    forExpr->Body.reset(newBody);
+  }
+
   // Return original expression if all else fails
   return Expression;
 }

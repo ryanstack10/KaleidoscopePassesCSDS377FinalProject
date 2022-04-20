@@ -21,6 +21,11 @@ static std::string print_ast(ExprAST* ast) {
     return varExpr->Name;
   }
 
+  ForExprAST* forExpr = dynamic_cast<ForExprAST*>(ast);
+  if (forExpr != nullptr) {
+    return "for(" + print_ast(forExpr->Start.get()) + ", " + print_ast(forExpr->End.get()) + ", " + print_ast(forExpr->Step.get()) + ") {" + print_ast(forExpr->Body.get()) + ")";
+  }
+
   return "INVALID";
 }
 
