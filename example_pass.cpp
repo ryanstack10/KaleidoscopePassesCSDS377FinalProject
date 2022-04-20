@@ -26,6 +26,15 @@ static std::string print_ast(ExprAST* ast) {
     return "for(" + print_ast(forExpr->Start.get()) + ", " + print_ast(forExpr->End.get()) + ", " + print_ast(forExpr->Step.get()) + ") {" + print_ast(forExpr->Body.get()) + ")";
   }
 
+  CallExprAST* callExpr = dynamic_cast<CallExprAST*>(ast);
+  if (callExpr != nullptr) {
+    std::string arglist = "";
+    for (auto& arg : callExpr->Args) {
+      arglist += print_ast(arg.get()) + " ";
+    }
+    return callExpr->Callee + "(" + arglist + ")";
+  }
+
   return "INVALID";
 }
 

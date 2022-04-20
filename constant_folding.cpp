@@ -50,6 +50,16 @@ static ExprAST* FoldExpression(ExprAST* Expression) {
     forExpr->Body.reset(newBody);
   }
 
+  // Check if this is a function call
+  CallExprAST* callExpr = dynamic_cast<CallExprAST*>(Expression);
+  if (callExpr != nullptr) {
+    int argCount = callExpr->Args.size();
+    for (int arg = 0; arg < argCount; arg++) {
+      ExprAST* newArg = FoldExpression(callExpr->Args[arg].get());
+      callExpr->Args[arg].release();
+      callExpr->Args[arg].reset(newArg);
+    }
+  }
   // Return original expression if all else fails
   return Expression;
 }
