@@ -1324,7 +1324,9 @@ int main() {
   MainLoop();
 
   // Call your pass here
+  ExamplePass(TheModuleAST.get());
   ConstantFold(TheModuleAST.get());
+  ExamplePass(TheModuleAST.get());
 
   TheModuleAST->codegen();
 

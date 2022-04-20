@@ -6,8 +6,12 @@ static ExprAST* FoldExpression(ExprAST* Expression) {
   BinaryExprAST* binExpr = dynamic_cast<BinaryExprAST*>(Expression);
   if (binExpr != nullptr) {
     // Fold children first
-    FoldExpression(binExpr->LHS.get());
-    FoldExpression(binExpr->RHS.get());
+    ExprAST* newLHS = FoldExpression(binExpr->LHS.get());
+    binExpr->LHS.release();
+    binExpr->LHS.reset(newLHS);
+    ExprAST* newRHS = FoldExpression(binExpr->RHS.get());
+    binExpr->RHS.release();
+    binExpr->RHS.reset(newRHS);
 
     // If both the LHS and RHS can be casted to constants, we can fold them
     NumberExprAST* numLHS = dynamic_cast<NumberExprAST*>(binExpr->LHS.get());
@@ -26,20 +30,22 @@ static ExprAST* FoldExpression(ExprAST* Expression) {
       }
       return combined;
     }
-
-    // Otherwise, we cannot fold this expression, do nothing.
-    return Expression;
   }
 
-  // Return Expression if all else fails
+  // Return original expression if all else fails
   return Expression;
 }
 
 void ConstantFold(ModuleAST* TheModule) {
   fprintf(stderr, "RUNNING CONSTANT FOLDING\n");
+
+  // Iterate through every function in the module
   std::map<std::string, std::pair<std::unique_ptr<FunctionAST>, bool>>::iterator fn;
   for (fn = TheModule->Functions.begin(); fn != TheModule->Functions.end(); fn++) {
     fprintf(stderr, "Attempting to fold the body of %s\n", fn->first.c_str());
-    *(fn->second.first->Body) = *FoldExpression(fn->second.first->Body.get());
+    ExprAST* newFn = FoldExpression(fn->second.first->Body.get());
+    fn->second.first->Body.release();
+    fn->second.first->Body.reset(newFn);
   }
+  std::cout << "Finished constant folding" << std::endl;
 }
