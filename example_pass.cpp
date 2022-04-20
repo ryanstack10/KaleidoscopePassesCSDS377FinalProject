@@ -8,7 +8,7 @@ static std::string print_ast(ExprAST* ast) {
   // Check if this is a binary operation
   BinaryExprAST* binExpr = dynamic_cast<BinaryExprAST*>(ast);
   if (binExpr != nullptr) {
-    return print_ast(binExpr->LHS.get()) + binExpr->Op + print_ast(binExpr->RHS.get());
+    return "(" + print_ast(binExpr->LHS.get()) + ")" + binExpr->Op + "(" + print_ast(binExpr->RHS.get()) + ")";
   }
 
   NumberExprAST* numExpr = dynamic_cast<NumberExprAST*>(ast);
